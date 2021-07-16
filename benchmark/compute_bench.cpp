@@ -43,6 +43,7 @@ int main()
 
     dcgp::kernel_set<double> kernel_set1({"sum", "diff", "mul", "div"});
     audi::stream(std::cout, "Function set ", kernel_set1(), "\n");
+    perform_evaluations(1, 1, 1, 16, 17, 2, N, kernel_set1());
     perform_evaluations(2, 4, 2, 3, 4, 4, N, kernel_set1());
     perform_evaluations(2, 4, 10, 10, 11, 5, N, kernel_set1());
     perform_evaluations(2, 4, 20, 20, 21, 6, N, kernel_set1());

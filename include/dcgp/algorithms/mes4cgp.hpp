@@ -443,6 +443,14 @@ private:
     }
 
 public:
+    /// Object serialization
+    /**
+     * This method will save/load \p this into the archive \p ar.
+     *
+     * @param ar target archive.
+     *
+     * @throws unspecified any exception thrown by the serialization of the expression and of primitive types.
+     */
     template <typename Archive>
     void serialize(Archive &ar, unsigned)
     {

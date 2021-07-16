@@ -89,9 +89,9 @@ public:
         for (auto i = 0u; i < m_x.size(); ++i) {
             m_x[i] = std::uniform_int_distribution<unsigned>(m_lb[i], m_ub[i])(m_e);
         }
-        // We init the ephemeral constants with 1,2,3,4,5 ...
-        for (auto i = 1u; i <= n_eph; ++i) {
-            m_eph_val.push_back(static_cast<T>(i));
+        // We init the ephemeral constants in [-10, 10]
+        for (auto i = 0u; i < n_eph; ++i) {
+            m_eph_val.push_back(static_cast<T>(std::uniform_real_distribution<double>(-10., 10.)(m_e)));
         }
         // We init the ephemeral constants with c1,c2,c3,c4,c5 ...
         for (auto i = 1u; i <= n_eph; ++i) {
@@ -373,6 +373,24 @@ public:
     {
         check_cgp_encoding(xu);
         m_x = xu;
+        update_data_structures();
+    }
+
+    /// Sets the chromosome from range
+    /**
+     * Sets a given chromosome as genotype for the expression and updates
+     * the active nodes and active genes information accordingly
+     *
+     * @param[in] begin iterator to the first element of the range
+     * @param[in] end iterator to the end element of the range
+     *
+     * @throw std::invalid_argument if the chromosome is out of bounds or has the wrong size.
+     */
+    template <class InputIt>
+    void set_from_range(InputIt begin, InputIt end)
+    {
+        check_cgp_encoding(begin, end);
+        std::transform(begin, end, m_x.begin(), [](auto x){return static_cast<unsigned>(x);});
         update_data_structures();
     }
 
@@ -693,17 +711,44 @@ public:
         for (auto i = 0u; i < N; ++i) {
             // If only one value is allowed for the gene, (lb==ub),
             // then we will not do anything as mutation does not apply
-            auto idx = std::uniform_int_distribution<unsigned>(0, m_lb.size() - 1)(m_e);
+            auto idx = std::uniform_int_distribution<>(0, m_lb.size() - 1)(m_e);
             if (m_lb[idx] < m_ub[idx]) {
                 unsigned new_value;
                 do {
-                    new_value = std::uniform_int_distribution<unsigned>(m_lb[idx], m_ub[idx])(m_e);
+                    new_value = std::uniform_int_distribution<>(m_lb[idx], m_ub[idx])(m_e);
                 } while (new_value == m_x[idx]);
                 m_x[idx] = new_value;
                 flag = true;
             }
         }
         if (flag) update_data_structures();
+    }
+
+    /// Mutates inactive genes randomly up to \p N
+    /**
+     * Mutates inactive random genes within their bounds up to \p N.
+     * The guarantee to actually mutate N would cost and is deemed unnecessary.
+     *
+     * @param[in] N maximum number of inactive genes to be mutated
+     *
+     */
+    void mutate_inactive(unsigned N = 1u)
+    {
+        for (auto i = 0u; i < N; ++i) {
+            auto idx = std::uniform_int_distribution<>(0, m_lb.size() - 1)(m_e);
+            if (!is_active_gene(idx)) {
+                // If only one value is allowed for the gene, (lb==ub),
+                // then we will not do anything as mutation does not apply
+                if (m_lb[idx] < m_ub[idx]) {
+                    unsigned new_value;
+                    do {
+                        new_value = std::uniform_int_distribution<>(m_lb[idx], m_ub[idx])(m_e);
+                    } while (new_value == m_x[idx]);
+                    m_x[idx] = new_value;
+                    // no need to update the data structures as the gene was inactive
+                }
+            }
+        }
     }
 
     /// Mutates active genes
@@ -714,14 +759,15 @@ public:
      * @param[in] N Number of active genes to be mutated
      *
      */
-    void mutate_active(unsigned N = 1)
+    void mutate_active(unsigned N = 1u)
     {
+        std::vector<unsigned> idxs(N, 0u);
         for (auto i = 0u; i < N; ++i) {
             unsigned idx
                 = std::uniform_int_distribution<unsigned>(0, static_cast<unsigned>(m_active_genes.size() - 1u))(m_e);
-            idx = m_active_genes[idx];
-            mutate(idx);
+            idxs[i] = m_active_genes[idx];
         }
+        mutate(idxs);
     }
 
     /// Mutates active function genes
@@ -809,9 +855,21 @@ public:
      *
      * @return True if the node *node_id* is active in the CGP expression.
      */
-    bool is_active(const unsigned node_id) const
+    bool is_active_node(const unsigned node_id) const
     {
         return (std::find(m_active_nodes.begin(), m_active_nodes.end(), node_id) != m_active_nodes.end());
+    }
+
+    /// Checks if a given gene is active
+    /**
+     *
+     * @param[in] idx the idx of the gene to be checked
+     *
+     * @return True if the gene *idx* is active in the CGP expression.
+     */
+    bool is_active_gene(const unsigned idx) const
+    {
+        return (std::find(m_active_genes.begin(), m_active_genes.end(), idx) != m_active_genes.end());
     }
 
     /// Overloaded stream operator
@@ -845,33 +903,6 @@ public:
     }
 
 protected:
-    /// Validity of the CGP encoding
-    /**
-     * Checks if a CGP encoding (i.e. a sequence of integers) is a valid expression
-     * by verifying its length and the bounds
-     *
-     * @param[in] xu chromosome
-     */
-    bool check_cgp_encoding(const std::vector<unsigned> &xu) const
-    {
-        // Checking for length
-        if (xu.size() != m_lb.size()) {
-            throw std::invalid_argument("Inconsistent chromosome: length of the chromosome is : "
-                                        + std::to_string(xu.size())
-                                        + ", while it should be: " + std::to_string(m_lb.size()));
-        }
-        // Checking for bounds on all genes
-        for (auto i = 0u; i < xu.size(); ++i) {
-            if ((xu[i] > m_ub[i]) || (xu[i] < m_lb[i])) {
-                throw std::invalid_argument("Inconsistent chromosome: out of bounds. The component " + std::to_string(i)
-                                            + " of the chromosome is " + std::to_string(xu[i])
-                                            + " while the bounds are: [" + std::to_string(m_lb[i]) + " " + ", "
-                                            + std::to_string(m_ub[i]) + "]");
-            }
-        }
-        return true;
-    }
-
     /// Unchecked get arity
     /**
      * The public method get_arity, has some checks thet are significantly impacting speed if used in performance
@@ -1001,6 +1032,43 @@ protected:
     }
 
 private:
+    /// Validity of the CGP encoding
+    /**
+     * Checks if a CGP encoding (i.e. a sequence of integers) is a valid expression
+     * by verifying its length and the bounds
+     *
+     * @param[in] xu chromosome
+     */
+    bool check_cgp_encoding(const std::vector<unsigned> &xu) const
+    {
+        return check_cgp_encoding(xu.begin(), xu.end());
+    }
+
+    template <class InputIt>
+    bool check_cgp_encoding(InputIt begin, InputIt end) const
+    {
+        unsigned size = static_cast<unsigned>(std::distance(begin, end));
+        // Checking for length
+        if (size != m_lb.size()) {
+            throw std::invalid_argument("Inconsistent chromosome: length of the chromosome is : " + std::to_string(size)
+                                        + ", while it should be: " + std::to_string(m_lb.size()));
+        }
+        // Checking for bounds on all genes
+        auto lb_iter = m_lb.begin();
+        auto ub_iter = m_ub.begin();
+        while (begin != end) {
+            if ((*begin > *ub_iter) || (*begin < *lb_iter)) {
+                throw std::invalid_argument("Inconsistent chromosome: out of bounds. A component of the chromosome is "
+                                            + std::to_string(*begin) + " while the bounds are: ["
+                                            + std::to_string(*lb_iter) + " " + ", " + std::to_string(*ub_iter) + "]");
+            }
+            ++begin;
+            ++lb_iter;
+            ++ub_iter;
+        }
+        return true;
+    }
+    
     void sanity_checks()
     {
         if (m_n == 0) throw std::invalid_argument("Number of inputs is 0");

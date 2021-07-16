@@ -1012,7 +1012,7 @@ private:
                 unsigned w_idx = (idx - 1u) - (node_id - this->get_n());
                 // loop over the genes representing connections
                 for (auto i = 0u; i < this->_get_arity(node_id); ++i) {
-                    if (this->is_active(this->get()[idx + i])) {
+                    if (this->is_active_node(this->get()[idx + i])) {
                         m_connected[this->get()[idx + i]].push_back({node_id, w_idx + i});
                     }
                 }

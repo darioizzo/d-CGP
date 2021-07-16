@@ -89,6 +89,7 @@ void expose_symbolic_regression(py::module &m)
             py::arg("n_eph") = 0u, py::arg("multi_objective") = false, py::arg("parallel_batches") = 0u,
             py::arg("loss") = "MSE")
         .def("get_nobj", &dcgp::symbolic_regression::get_nobj)
+        .def("get_cgp", &dcgp::symbolic_regression::get_cgp)
         .def("fitness", &dcgp::symbolic_regression::fitness)
         .def("gradient", &dcgp::symbolic_regression::gradient)
         .def("gradient_sparsity",

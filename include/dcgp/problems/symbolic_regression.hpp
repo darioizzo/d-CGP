@@ -178,40 +178,38 @@ public:
         }
         // In the multiobjective case we compute the formula complexity
         if (m_multi_objective) {
-            std::ostringstream ss;
-            // A first "naive" implementation of the formula complexity measure is the length of
-            // the shortest string among pretty and prettier. That is among the raw cgp expression
-            // and the result of constructing a symengine expression out of it (which carries out some
-            // basic simplifications but that may results in rare occasions in a longer string).
-            std::vector<std::string> pretty = m_cgp(m_symbols);
-            double l_pretty = std::accumulate(pretty.begin(), pretty.end(), 0., [](double a, std::string b) {
-                return a + static_cast<double>(b.length());
-            });
-            // A second definition for the complexity is the length of the expression
-            // after it has been simplified. We use symengine to perform such a simplification
-            // which will make sense only if nans and infs are not in the expression.
-            double l_prettier = 0;
-            if (std::isfinite(retval[0])) {
-                for (decltype(pretty.size()) i = 0u; i < pretty.size(); ++i) {
-                    try {
-                        SymEngine::Expression prettier(pretty[i]);
-                        pagmo::stream(ss, prettier);
-                        auto string = ss.str();
-                        // We remove whitespaces too
-                        l_prettier += static_cast<double>(
-                            string.length()
-                            - static_cast<decltype(string.length())>(std::count(string.begin(), string.end(), ' ')));
-                    } catch (...) { // TODO: this should be understood. Why is symengine sometime not able to
-                        // construct an expression from a cgp expression that is finite?
-                        l_prettier += static_cast<double>(pretty[i].length());
-                    }
-                }
-                // Here we define the formula complexity as the shortest between the two.
-                retval[1] = std::min(l_pretty, l_prettier);
-            } else {
-                // Or, simply, l_pretty if simplifications make little sense
-                retval[1] = l_pretty;
-            }
+            //std::ostringstream ss;
+            //// A first "naive" implementation of the formula complexity measure is the length of
+            //// the shortest string among pretty and prettier. That is among the raw cgp expression
+            //// and the result of constructing a symengine expression out of it (which carries out some
+            //// basic simplifications but that may results in rare occasions in a longer string).
+            //std::vector<std::string> pretty = m_cgp(m_symbols);
+            //double l_pretty = std::accumulate(pretty.begin(), pretty.end(), 0., [](double a, std::string b) {
+            //    return a + static_cast<double>(b.length());
+            //});
+            //// A second definition for the complexity is the length of the expression
+            //// after it has been simplified. We use symengine to perform such a simplification
+            //// which will make sense only if nans and infs are not in the expression.
+            //double l_prettier = 0;
+            //if (std::isfinite(retval[0])) {
+            //    for (decltype(pretty.size()) i = 0u; i < pretty.size(); ++i) {
+            //        try {
+            //            SymEngine::Expression prettier(pretty[i]);
+            //            pagmo::stream(ss, prettier);
+            //            auto string = ss.str();
+            //            // We remove whitespaces too
+            //            l_prettier += static_cast<double>(
+            //                string.length()
+            //                - static_cast<decltype(string.length())>(std::count(string.begin(), string.end(), ' ')));
+            //        } catch (...) { // TODO: this should be understood. Why is symengine sometime not able to
+            //            // construct an expression from a cgp expression that is finite?
+            //            l_prettier += static_cast<double>(pretty[i].length());
+            //        }
+            //    }
+            //}
+            //// Here we define the formula complexity as the shortest between the two.
+            //retval[1] = std::min(l_pretty, l_prettier);
+            retval[1] = static_cast<double>(m_cgp.get_active_genes().size());
         }
         return retval;
     }
@@ -491,6 +489,23 @@ public:
         return m_cgp;
     }
 
+    /// Sets the inner CGP
+    /**
+     * The access to the inner CGP is offered in the public interface to allow evolve methods in UDAs
+     * to reuse the same object and perform mutations via it. 
+     */    
+    void set_cgp(const pagmo::vector_double &x) const
+    {
+        // We need to make a copy of the chromosome as to represents its genes as unsigned
+        std::vector<unsigned> xu(x.size() - m_n_eph);
+        std::transform(x.data() + m_n_eph, x.data() + x.size(), xu.data(),
+                       [](double a) { return boost::numeric_cast<unsigned>(a); });
+        m_cgp.set(xu);
+        // 2 - We set the floating point part as ephemeral constants.
+        std::vector<double> eph_val(x.data(), x.data() + m_n_eph);
+        m_cgp.set_eph_val(eph_val);
+    }
+
     /// Model predictions
     /**
      * Uses the model encoded in *x* to predict the label of *point*.
@@ -570,19 +585,6 @@ private:
         return retval;
     }
 
-    // This setter can be marked const as m_cgp is mutable
-    void set_cgp(const pagmo::vector_double &x) const
-    {
-        // We need to make a copy of the chromosome as to represents its genes as unsigned
-        std::vector<unsigned> xu(x.size() - m_n_eph);
-        std::transform(x.data() + m_n_eph, x.data() + x.size(), xu.data(),
-                       [](double a) { return boost::numeric_cast<unsigned>(a); });
-        m_cgp.set(xu);
-        // 2 - We set the floating point part as ephemeral constants.
-        std::vector<double> eph_val(x.data(), x.data() + m_n_eph);
-        m_cgp.set_eph_val(eph_val);
-    }
-
     void sanity_checks(unsigned &n, unsigned &m) const
     {
         // 1 - We check that points is not an empty vector.
@@ -617,6 +619,14 @@ private:
     }
 
 public:
+    /// Object serialization
+    /**
+     * This method will save/load \p this into the archive \p ar.
+     *
+     * @param ar target archive.
+     *
+     * @throws unspecified any exception thrown by the serialization of the expression and of primitive types.
+     */
     template <typename Archive>
     void serialize(Archive &ar, unsigned)
     {

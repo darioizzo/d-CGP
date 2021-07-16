@@ -145,13 +145,7 @@ public:
         auto best_idx = pop.best_idx();
         auto best_x = pop.get_x()[best_idx];
         double best_f = pop.get_f()[best_idx][0];
-        // And we split it into its integer ...
-        std::vector<unsigned> best_xu(best_x.size() - n_eph);
-        std::transform(best_x.data() + n_eph, best_x.data() + best_x.size(), best_xu.begin(),
-                       [](double a) { return boost::numeric_cast<unsigned>(a); });
-        // ... and its continuous part
-        auto best_xd = std::vector<double>(best_x.data(), best_x.data() + n_eph);
-        auto mutated_eph_val = std::vector<double>(best_xd.size(), 0.);
+        auto mutated_eph_val = std::vector<double>(n_eph, 0.);
         // Normal distribution (to perturb the constants)
         std::normal_distribution<> normal{0., 1.};
         // Uniform distribution (to pick the number of active mutations)
@@ -179,16 +173,16 @@ public:
             // 1 - We generate new NP individuals mutating the best and we write on the dvs for pagmo::bfe to evaluate
             // their fitnesses.
             for (decltype(NP) i = 0u; i < NP; ++i) {
-                cgp.set(best_xu);
-                cgp.mutate_active(dis(m_e));
+                cgp.set_from_range(best_x.begin() + n_eph, best_x.end());
+                cgp.mutate_random(dis(m_e));
                 std::vector<unsigned> mutated_x = cgp.get();
                 std::transform(mutated_x.begin(), mutated_x.end(), dvs.data() + i * dim + n_eph,
                                [](unsigned a) { return boost::numeric_cast<double>(a); });
 
                 // We then mutate the continuous part if requested
                 if (m_learn_constants) {
-                    for (decltype(best_xd.size()) j = 0u; j < best_xd.size(); ++j) {
-                        mutated_eph_val[j] = best_xd[j] + 0.1 * normal(m_e);
+                    for (auto j = 0u; j < n_eph; ++j) {
+                        mutated_eph_val[j] = best_x[j] + 10. * normal(m_e);
                     }
                     std::copy(mutated_eph_val.begin(), mutated_eph_val.end(), dvs.data() + i * dim);
                 }
@@ -205,19 +199,13 @@ public:
                     fs[i] = tmp_f[0];
                 }
             }
-            // TODO: This is only making sense for pythonic bfes fix the issue upstream
-            // prob.increment_fevals(fs.size());
-
-            // 4 - We reinsert the mutated individuals in the population if their fitness is
-            // less than, or equal, to the one from the parent.
+            // 4 - We insert the mutated individuals in the population if their fitness is not worse than 
+            // the parent's 
             for (decltype(NP) i = 0u; i < NP; ++i) {
-                if (pagmo::detail::less_than_f(fs[i], best_f)) {
+                if (!pagmo::detail::greater_than_f(fs[i], best_f)) {
                     best_f = fs[i];
                     // best_x is updated here
                     std::copy(dvs.data() + i * dim, dvs.data() + (i + 1) * dim, best_x.begin());
-                    // best_xu is updated here
-                    std::transform(dvs.data() + i * dim + n_eph, dvs.data() + (i + 1) * dim, best_xu.begin(),
-                                   [](double a) { return boost::numeric_cast<unsigned>(a); });
                 }
             }
             // Check if ftol exit condition is met
@@ -387,6 +375,14 @@ private:
     }
 
 public:
+    /// Object serialization
+    /**
+     * This method will save/load \p this into the archive \p ar.
+     *
+     * @param ar target archive.
+     *
+     * @throws unspecified any exception thrown by the serialization of the expression and of primitive types.
+     */
     template <typename Archive>
     void serialize(Archive &ar, unsigned)
     {

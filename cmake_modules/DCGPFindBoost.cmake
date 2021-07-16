@@ -1,14 +1,5 @@
-# Run a first pass for finding the headers only,
-# and establishing the Boost version.
-set(_DCGP_BOOST_MINIMUM_VERSION 1.60.0)
-find_package(Boost ${_DCGP_BOOST_MINIMUM_VERSION} QUIET REQUIRED)
-
-set(_DCGP_REQUIRED_BOOST_LIBS timer chrono serialization system unit_test_framework)
-
-# Add the unit test framework, if needed.
-if(_DCGP_FIND_BOOST_UNIT_TEST_FRAMEWORK)
-    list(APPEND _DCGP_REQUIRED_BOOST_LIBS unit_test_framework)
-endif()
+set(_DCGP_REQUIRED_BOOST_LIBS)
+list(APPEND _DCGP_REQUIRED_BOOST_LIBS timer chrono serialization system unit_test_framework program_options)
 
 message(STATUS "Required Boost libraries: ${_DCGP_REQUIRED_BOOST_LIBS}")
 find_package(Boost ${_DCGP_BOOST_MINIMUM_VERSION} REQUIRED COMPONENTS ${_DCGP_REQUIRED_BOOST_LIBS})

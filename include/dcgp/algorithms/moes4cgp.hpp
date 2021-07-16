@@ -135,6 +135,11 @@ public:
         // A contiguous vector of chromosomes/fitness vectors for pagmo::bfe input\output is allocated here.
         pagmo::vector_double dvs(NP * dim);
         pagmo::vector_double fs(NP * n_obj);
+        // Containers for fitness and decision vectors in a non contiguous structure
+        std::vector<pagmo::vector_double> dvs_v(2 * NP, pagmo::vector_double(dim, 0.));
+        std::vector<pagmo::vector_double> fs_v(2 * NP, pagmo::vector_double(n_obj, std::numeric_limits<double>::infinity()));
+        // This will store the idx of the best individuals to select for the next generation.
+        std::vector<pagmo::vector_double::size_type> best_idx(NP);
 
         // Main loop
         for (decltype(m_gen) gen = 1u; gen <= m_gen; ++gen) {
@@ -158,66 +163,47 @@ public:
                     }
                 }
             }
-
-            // At each generation we need a copy of the population
-            pagmo::population popnew(pop);
-            // This will store the idx of the best individuals to select for the next generation.
-            std::vector<pagmo::vector_double::size_type> best_idx(NP);
-            // 1 - We generate new NP individuals mutating the chromosome
-            std::vector<pagmo::vector_double> mutated_x(NP);
+            // 1 - We generate new NP individuals mutating the best and we write on the dvs for pagmo::bfe to evaluate
+            // their fitnesses.
             for (decltype(NP) i = 0u; i < NP; ++i) {
-                mutated_x[i] = pop.get_x()[i];
-                // a - mutate the integer part
-                // We extract the integer part of the individual
-                std::vector<unsigned> mutated_xu(mutated_x[i].size() - n_eph);
-                std::transform(mutated_x[i].data() + n_eph, mutated_x[i].data() + mutated_x[i].size(),
-                               mutated_xu.begin(), [](double a) { return boost::numeric_cast<unsigned>(a); });
-                // Use it to set the CGP
-                cgp.set(mutated_xu);
-                // Mutate the expression
-                cgp.mutate_active(dis(m_e));
-                mutated_xu = cgp.get();
-                // Put it back
-                std::transform(mutated_xu.begin(), mutated_xu.end(), mutated_x[i].data() + n_eph,
+                cgp.set_from_range(pop.get_x()[i].begin() + n_eph, pop.get_x()[i].end());
+                cgp.mutate_random(dis(m_e));
+                std::transform(cgp.get().begin(), cgp.get().end(), dvs.data() + i * dim + n_eph,
                                [](unsigned a) { return boost::numeric_cast<double>(a); });
-                // b - mutate the continuous part if requested
+
+                // We then mutate the continuous part if requested
                 if (m_learn_constants) {
-                    for (decltype(n_eph) j = 0u; j < n_eph; ++j) {
-                        mutated_x[i][j] = mutated_x[i][j] + 0.1 * normal(m_e);
+                    for (auto j = 0u; j < n_eph; ++j) {
+                        dvs[i * dim + j] = pop.get_x()[i][j] + 10. * normal(m_e);
                     }
                 }
-                // c - copy the mutated chromosome into dv (note that one could write the code
-                // above without the auxiliary mutated_x but readibility would be dimmisnished)
-                std::copy(mutated_x[i].begin(), mutated_x[i].end(), dvs.data() + i * dim);
             }
+
             // 2 - We compute the mutants fitnesses
-            if (m_bfe) {
-                fs = (*m_bfe)(prob, dvs);
-            } else {
-                for (decltype(NP) i = 0u; i < NP; ++i) {
-                    pagmo::vector_double tmp_x(dim);
-                    std::copy(dvs.data() + i * dim, dvs.data() + (i + 1) * dim, tmp_x.begin());
-                    pagmo::vector_double tmp_f = prob.fitness(tmp_x);
-                    std::copy(tmp_f.begin(), tmp_f.end(), fs.data() + i * n_obj);
-                }
-            }
-            // 3 - We insert the mutated individuals in the population
-            std::vector<double> tmp_x(dim);
-            std::vector<double> tmp_f(n_obj);
+            // First we copy the dvs into dvs_v
             for (decltype(NP) i = 0u; i < NP; ++i) {
-                std::copy(dvs.data() + i * dim, dvs.data() + (i + 1) * dim, tmp_x.begin());
-                std::copy(fs.data() + i * n_obj, fs.data() + (i + 1) * n_obj, tmp_f.begin());
-                auto current_fs = popnew.get_f();
-                if (std::find(current_fs.begin(), current_fs.end(), tmp_f) == current_fs.end()
-                    && std::isfinite(tmp_f[0])) {
-                    popnew.push_back(tmp_x, tmp_f);
+                std::copy(dvs.data() + i * dim, dvs.data() + (i + 1) * dim, dvs_v[i].begin());
+            }
+            if (m_bfe) { // bfe evaluation
+                fs = (*m_bfe)(prob, dvs);
+                for (decltype(NP) i = 0u; i < NP; ++i) {
+                    std::copy(fs.data() + i * n_obj, fs.data() + (i + 1) * n_obj, fs_v[i].begin());
+                }
+            } else { // normal evaluation
+                for (decltype(NP) i = 0u; i < NP; ++i) {
+                    fs_v[i] = prob.fitness(dvs_v[i]);
                 }
             }
+            for (decltype(NP) i = 0u; i < NP; ++i) {
+                fs_v[i + NP] = pop.get_f()[i];
+                dvs_v[i + NP] = pop.get_x()[i];
+            }
+
             // 4 - We select a new population using non dominated sorting
-            best_idx = pagmo::select_best_N_mo(popnew.get_f(), NP);
+            best_idx = pagmo::select_best_N_mo(fs_v, NP);
             // 5 - We insert into the population
-            for (pagmo::population::size_type i = 0; i < NP; ++i) {
-                pop.set_xf(i, popnew.get_x()[best_idx[i]], popnew.get_f()[best_idx[i]]);
+            for (decltype(best_idx.size()) i = 0; i < best_idx.size(); ++i) {
+                    pop.set_xf(i, dvs_v[best_idx[i]], fs_v[best_idx[i]]);
             }
         }
         if (m_verbosity > 0u) {
@@ -283,7 +269,8 @@ public:
 
 
      * @endcode
-     * Gen is the generation number, Fevals the number of function evaluation used, Best loss is the best loss in the
+     * Gen is the generation number, Fevals the number of function evaluation used, Best loss is the best loss in
+     the
      * population, Ndf size is the size of the non dominated front (i.e. the number of models that are optimal) and
      * compl. is the complexity of the lowest loss model.
      *
@@ -335,8 +322,8 @@ public:
      * <tt>std::vector</tt> is a moes4cgp::log_line_type containing: Gen, Fevals, Best loss, Ndf size and Complexity
      * described in moes4cgp::set_verbosity().
      *
-     * @return an <tt> std::vector</tt> of moes4cgp::log_line_type containing the logged values Gen, Fevals, Best loss,
-     * Ndf size and Complexity
+     * @return an <tt> std::vector</tt> of moes4cgp::log_line_type containing the logged values Gen, Fevals, Best
+     * loss, Ndf size and Complexity
      */
     const log_type &get_log() const
     {
@@ -356,6 +343,14 @@ private:
     }
 
 public:
+    /// Object serialization
+    /**
+     * This method will save/load \p this into the archive \p ar.
+     *
+     * @param ar target archive.
+     *
+     * @throws unspecified any exception thrown by the serialization of the expression and of primitive types.
+     */
     template <typename Archive>
     void serialize(Archive &ar, unsigned)
     {

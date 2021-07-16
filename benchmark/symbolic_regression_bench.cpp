@@ -15,12 +15,12 @@ int main()
     {
         kernel_set<double> basic_set({"sum", "diff", "mul", "div"});
         std::vector<std::vector<double>> points, labels;
-        gym::generate_P4(points, labels);
-        symbolic_regression udp(points, labels, 2, 100, 30, 2, basic_set(), 5u, 0u);
-        pagmo::population pop(udp, 100, 32u);
+        gym::generate_P1(points, labels);
+        symbolic_regression udp(points, labels, 1u, 16u, 17u, 2u, basic_set(), 3u, false, 0u, "MSE");
+        pagmo::population pop(udp, 100000u, 32u);
 
         // We measure the speed on N fitness evaluations
-        pagmo::print("Fitness evaluation speed on 100 calls: \n");
+        pagmo::print("Fitness evaluation speed on 100000 calls: \n");
         {
             boost::timer::auto_cpu_timer t;
             for (decltype(pop.size()) i = 0u; i < pop.size(); ++i) {
@@ -28,7 +28,7 @@ int main()
             }
         }
         // We measure the speed on N gradient evaluations
-        pagmo::print("Gradient evaluation speed on 100 calls: \n");
+        pagmo::print("Gradient evaluation speed on 100000 calls: \n");
         {
             boost::timer::auto_cpu_timer t;
             for (decltype(pop.size()) i = 0u; i < pop.size(); ++i) {
@@ -36,7 +36,7 @@ int main()
             }
         }
         // We measure the speed on N hessians evaluations
-        pagmo::print("Hessians evaluation speed on 100 calls: \n");
+        pagmo::print("Hessians evaluation speed on 100000 calls: \n");
         {
             boost::timer::auto_cpu_timer t;
             for (decltype(pop.size()) i = 0u; i < pop.size(); ++i) {
@@ -49,11 +49,11 @@ int main()
         kernel_set<double> basic_set({"sum", "diff", "mul", "div"});
         std::vector<std::vector<double>> points, labels;
         gym::generate_P4(points, labels);
-        symbolic_regression udp(points, labels, 2, 100, 30, 2, basic_set(), 5u, 0u);
-        pagmo::population pop(udp, 100, 32u);
+        symbolic_regression udp(points, labels, 1u, 16u, 17u, 2u, basic_set(), 3u, false, 0u, "MSE");
+        pagmo::population pop(udp, 100000, 32u);
 
         // We measure the speed of pretty
-        pagmo::print("\n\nPretty called on 100 chromosomes: \n");
+        pagmo::print("\n\nPretty called on 100000 chromosomes: \n");
         {
             boost::timer::auto_cpu_timer t;
             for (decltype(pop.size()) i = 0u; i < pop.size(); ++i) {
@@ -61,7 +61,7 @@ int main()
             }
         }
         // We measure the speed on N gradient evaluations
-        pagmo::print("Prettier called on 100 chromosomes: \n");
+        pagmo::print("Prettier called on 100000 chromosomes: \n");
         {
             boost::timer::auto_cpu_timer t;
             for (decltype(pop.size()) i = 0u; i < pop.size(); ++i) {

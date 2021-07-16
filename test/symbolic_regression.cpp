@@ -113,18 +113,11 @@ BOOST_AUTO_TEST_CASE(fitness_test_two_obj)
     symbolic_regression udp{points, labels, 1, 15, 16, 2, basic_set(), 2, true, 0u};
     pagmo::population pop(udp, 10u);
     for (decltype(pop.size()) i = 0u; i < pop.size(); ++i) {
-        auto string = udp.prettier(pop.get_x()[i]);
-        auto l1 = string.length()
-                  - static_cast<decltype(string.length())>(std::count(string.begin(), string.end(), ' '))
-                  - 2u; // no spaces and no [] parenthesis
-        auto l2 = udp.pretty(pop.get_x()[i]).length() - 2u;
-        if (std::isfinite(pop.get_f()[i][0])) {
-            BOOST_CHECK_EQUAL(std::min(l1, l2), pop.get_f()[i][1]);
-        } else {
-            BOOST_CHECK_EQUAL(l2, pop.get_f()[i][1]);
-        }
+        udp.set_cgp(pop.get_x()[i]);
+        BOOST_CHECK_EQUAL(udp.get_cgp().get_active_genes().size(), pop.get_f()[i][1]);
     }
 }
+
 
 BOOST_AUTO_TEST_CASE(get_bounds_test)
 {

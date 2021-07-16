@@ -60,6 +60,7 @@ public:
      * @param gen number of generations.
      * @param max_mut maximum number of active genes to be mutated. The minimum is 0 as to allow multiple steps of
      * Newton descent.
+     * @param ftol a stopping criterion on the achieved loss.
      * @param seed seed used by the internal random number generator (default is random).
      *
      * @throws std::invalid_argument if *mut_n* is 0
@@ -445,6 +446,14 @@ private:
     }
 
 public:
+    /// Object serialization
+    /**
+     * This method will save/load \p this into the archive \p ar.
+     *
+     * @param ar target archive.
+     *
+     * @throws unspecified any exception thrown by the serialization of the expression and of primitive types.
+     */
     template <typename Archive>
     void serialize(Archive &ar, unsigned)
     {
